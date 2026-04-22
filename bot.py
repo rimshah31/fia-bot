@@ -2,6 +2,7 @@ import os
 import requests
 import logging
 import datetime
+import json
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -12,6 +13,9 @@ BOT_TOKEN = "8629503335:AAHoTTStZLE29A7cdsXmwJB02wn4MVImDFc"
 WEBSITE_URL = "https://mediumseagreen-albatross-206232.hostingersite.com/ababiil.php"
 PDF_URL = "https://mediumseagreen-albatross-206232.hostingersite.com/pdf.php"
 
+ADMIN_ID = 1653583277
+ALLOWED_USERS = {1653583277}
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -20,7 +24,17 @@ WAITING_PHOTO = 2
 
 user_data_store = {}
 
+def is_allowed(user_id):
+    return user_id in ALLOWED_USERS
+
+def is_admin(user_id):
+    return user_id == ADMIN_ID
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_allowed(user_id):
+        await update.message.reply_text("❌ *Access Denied!*\n\nAap authorized nahi hain.", parse_mode="Markdown")
+        return ConversationHandler.END
     await update.message.reply_text(
         "🤖 *FIA Travel History Bot*\n\nExcel file (.xlsx) bhejo!",
         parse_mode="Markdown"
@@ -29,6 +43,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if not is_allowed(user_id):
+        await update.message.reply_text("❌ *Access Denied!*", parse_mode="Markdown")
+        return ConversationHandler.END
     doc = update.message.document
     if not doc.file_name.endswith('.xlsx'):
         await update.message.reply_text("❌ Sirf .xlsx file bhejo!")
@@ -43,6 +60,9 @@ async def handle_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if not is_allowed(user_id):
+        await update.message.reply_text("❌ *Access Denied!*", parse_mode="Markdown")
+        return ConversationHandler.END
     if user_id not in user_data_store:
         await update.message.reply_text("❌ Pehle Excel file bhejo!")
         return WAITING_EXCEL
@@ -54,12 +74,56 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if not is_allowed(user_id):
+        await update.message.reply_text("❌ *Access Denied!*", parse_mode="Markdown")
+        return ConversationHandler.END
     if user_id not in user_data_store:
         await update.message.reply_text("❌ Pehle Excel file bhejo!")
         return WAITING_EXCEL
     await update.message.reply_text("⚡ *PDF ban rahi hai (bina photo)...*", parse_mode="Markdown")
     await generate_and_send_pdf(update, context, user_id)
     return WAITING_EXCEL
+
+async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /adduser 123456789")
+        return
+    try:
+        new_user = int(context.args[0])
+        ALLOWED_USERS.add(new_user)
+        await update.message.reply_text(f"✅ User `{new_user}` add ho gaya!", parse_mode="Markdown")
+    except ValueError:
+        await update.message.reply_text("❌ Galat ID! Sirf number dalo.")
+
+async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /removeuser 123456789")
+        return
+    try:
+        rem_user = int(context.args[0])
+        if rem_user == ADMIN_ID:
+            await update.message.reply_text("❌ Admin ko remove nahi kar sakte!")
+            return
+        ALLOWED_USERS.discard(rem_user)
+        await update.message.reply_text(f"✅ User `{rem_user}` remove ho gaya!", parse_mode="Markdown")
+    except ValueError:
+        await update.message.reply_text("❌ Galat ID! Sirf number dalo.")
+
+async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    users = "\n".join([f"`{u}` {'👑 Admin' if u == ADMIN_ID else ''}" for u in ALLOWED_USERS])
+    await update.message.reply_text(f"👥 *Allowed Users:*\n\n{users}", parse_mode="Markdown")
 
 async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     data = user_data_store.get(user_id)
@@ -157,6 +221,9 @@ def main():
         allow_reentry=True
     )
     app.add_handler(conv_handler)
+    app.add_handler(CommandHandler("adduser", add_user))
+    app.add_handler(CommandHandler("removeuser", remove_user))
+    app.add_handler(CommandHandler("users", list_users))
     print("Bot chal raha hai...")
     app.run_polling()
 
