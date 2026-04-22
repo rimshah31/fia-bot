@@ -2,7 +2,7 @@ import os
 import requests
 import logging
 import datetime
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
+from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
     filters, ContextTypes, ConversationHandler
@@ -95,16 +95,14 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
             text=f"🖼️ *Photo Status:* {photo_status}\n📄 Generating PDF...",
             parse_mode="Markdown"
         )
-        # Multiple pages handle karo
-images = []
-for i in range(1, 20):  # max 20 pages
-    images.append(f"{excel_name}_page{i}.png")
-
-pdf_response = requests.post(
-    PDF_URL,
-    data={'make_pdf': '1', 'images[]': images},
-    timeout=300
-)
+        images = []
+        for i in range(1, 20):
+            images.append(f"{excel_name}_page{i}.png")
+        pdf_response = requests.post(
+            PDF_URL,
+            data=[('make_pdf', '1')] + [('images[]', img) for img in images],
+            timeout=300
+        )
         if pdf_response.status_code == 200 and 'application/pdf' in pdf_response.headers.get('Content-Type', ''):
             now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             filename = f"FIA_Travel_History_{excel_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -121,7 +119,7 @@ pdf_response = requests.post(
                 caption="✅ *Document ready for printing!*",
                 parse_mode="Markdown"
             )
-            await update.message.reply_text("✅ *Process completed successfully! You can send another Excel file.*", parse_mode="Markdown")
+            await update.message.reply_text("✅ *Process completed! Aap doosri Excel file bhej sakte hain.*", parse_mode="Markdown")
         else:
             await update.message.reply_text("⚠️ PDF generate nahi hui. Dobara try karo.")
     except requests.exceptions.Timeout:
