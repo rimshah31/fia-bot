@@ -87,7 +87,7 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
             text=f"🖼️ *Photo Status:* {photo_status}\n⚡ Processing... please wait.",
             parse_mode="Markdown"
         )
-        response = requests.post(WEBSITE_URL, files=files, timeout=120)
+        response = requests.post(WEBSITE_URL, files=files, timeout=300)
         excel_name = os.path.splitext(data['excel_name'])[0]
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
@@ -98,7 +98,7 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
         pdf_response = requests.post(
             PDF_URL,
             data={'make_pdf': '1', 'images[]': [f"{excel_name}_page1.png"]},
-            timeout=120
+            timeout=300
         )
         if pdf_response.status_code == 200 and 'application/pdf' in pdf_response.headers.get('Content-Type', ''):
             now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
