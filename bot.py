@@ -9,8 +9,8 @@ from telegram.ext import (
 )
 
 BOT_TOKEN = "8629503335:AAHoTTStZLE29A7cdsXmwJB02wn4MVImDFc"
-WEBSITE_URL = "http://ababil.infinityfree.me/ababiil.php"
-PDF_URL = "http://ababil.infinityfree.me/pdf.php"
+WEBSITE_URL = "https://mediumseagreen-albatross-206232.hostingersite.com/ababiil.php"
+PDF_URL = "https://mediumseagreen-albatross-206232.hostingersite.com/pdf.php"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
