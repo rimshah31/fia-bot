@@ -2,7 +2,6 @@ import os
 import requests
 import logging
 import datetime
-import json
 from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, MessageHandler,
@@ -14,7 +13,6 @@ WEBSITE_URL = "https://mediumseagreen-albatross-206232.hostingersite.com/ababiil
 PDF_URL = "https://mediumseagreen-albatross-206232.hostingersite.com/pdf.php"
 
 ADMIN_ID = 1653583277
-ALLOWED_USERS = {1653583277}
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,29 +20,154 @@ logger = logging.getLogger(__name__)
 WAITING_EXCEL = 1
 WAITING_PHOTO = 2
 
+# {user_id: coins}
+user_coins = {1653583277: 9999}  # Admin ke paas unlimited coins
 user_data_store = {}
-
-def is_allowed(user_id):
-    return user_id in ALLOWED_USERS
 
 def is_admin(user_id):
     return user_id == ADMIN_ID
+
+def is_allowed(user_id):
+    return user_id in user_coins
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_allowed(user_id):
         await update.message.reply_text("❌ *Access Denied!*\n\nAap authorized nahi hain.", parse_mode="Markdown")
         return ConversationHandler.END
+    coins = user_coins.get(user_id, 0)
     await update.message.reply_text(
-        "🤖 *FIA Travel History Bot*\n\nExcel file (.xlsx) bhejo!",
+        f"🤖 *FIA Travel History Bot*\n\n💰 Tumhare coins: *{coins}*\n\nExcel file (.xlsx) bhejo!",
         parse_mode="Markdown"
     )
     return WAITING_EXCEL
+
+async def my_coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_allowed(user_id):
+        await update.message.reply_text("❌ *Access Denied!*", parse_mode="Markdown")
+        return
+    coins = user_coins.get(user_id, 0)
+    await update.message.reply_text(f"💰 Tumhare coins: *{coins}*", parse_mode="Markdown")
+
+async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Usage: /adduser 123456789 10")
+        return
+    try:
+        new_user = int(context.args[0])
+        coins = int(context.args[1])
+        user_coins[new_user] = coins
+        await update.message.reply_text(f"✅ User `{new_user}` add ho gaya!\n💰 Coins: *{coins}*", parse_mode="Markdown")
+    except ValueError:
+        await update.message.reply_text("❌ Galat format! /adduser 123456789 10")
+
+async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /removeuser 123456789")
+        return
+    try:
+        rem_user = int(context.args[0])
+        if rem_user == ADMIN_ID:
+            await update.message.reply_text("❌ Admin ko remove nahi kar sakte!")
+            return
+        if rem_user in user_coins:
+            del user_coins[rem_user]
+            await update.message.reply_text(f"✅ User `{rem_user}` remove ho gaya!", parse_mode="Markdown")
+        else:
+            await update.message.reply_text("❌ Ye user exist nahi karta!")
+    except ValueError:
+        await update.message.reply_text("❌ Galat ID!")
+
+async def add_coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Usage: /addcoins 123456789 10")
+        return
+    try:
+        target_user = int(context.args[0])
+        coins = int(context.args[1])
+        if target_user not in user_coins:
+            await update.message.reply_text("❌ Ye user exist nahi karta! Pehle /adduser karo.")
+            return
+        user_coins[target_user] += coins
+        await update.message.reply_text(
+            f"✅ User `{target_user}` ko *{coins}* coins add ho gaye!\n💰 Total: *{user_coins[target_user]}*",
+            parse_mode="Markdown"
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Galat format! /addcoins 123456789 10")
+
+async def remove_coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Usage: /removecoins 123456789 5")
+        return
+    try:
+        target_user = int(context.args[0])
+        coins = int(context.args[1])
+        if target_user not in user_coins:
+            await update.message.reply_text("❌ Ye user exist nahi karta!")
+            return
+        user_coins[target_user] = max(0, user_coins[target_user] - coins)
+        await update.message.reply_text(
+            f"✅ User `{target_user}` se *{coins}* coins remove ho gaye!\n💰 Remaining: *{user_coins[target_user]}*",
+            parse_mode="Markdown"
+        )
+    except ValueError:
+        await update.message.reply_text("❌ Galat format! /removecoins 123456789 5")
+
+async def check_coins(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if not context.args:
+        await update.message.reply_text("❌ Usage: /checkcoins 123456789")
+        return
+    try:
+        target_user = int(context.args[0])
+        coins = user_coins.get(target_user, None)
+        if coins is None:
+            await update.message.reply_text("❌ Ye user exist nahi karta!")
+        else:
+            await update.message.reply_text(f"💰 User `{target_user}` ke coins: *{coins}*", parse_mode="Markdown")
+    except ValueError:
+        await update.message.reply_text("❌ Galat ID!")
+
+async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if not is_admin(user_id):
+        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
+        return
+    if not user_coins:
+        await update.message.reply_text("❌ Koi user nahi hai!")
+        return
+    users = "\n".join([f"`{u}` — 💰 *{c}* coins {'👑' if u == ADMIN_ID else ''}" for u, c in user_coins.items()])
+    await update.message.reply_text(f"👥 *All Users:*\n\n{users}", parse_mode="Markdown")
 
 async def handle_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if not is_allowed(user_id):
         await update.message.reply_text("❌ *Access Denied!*", parse_mode="Markdown")
+        return ConversationHandler.END
+    coins = user_coins.get(user_id, 0)
+    if coins <= 0 and not is_admin(user_id):
+        await update.message.reply_text("❌ *Coins khatam ho gaye!*\n\nAdmin se coins lो.", parse_mode="Markdown")
         return ConversationHandler.END
     doc = update.message.document
     if not doc.file_name.endswith('.xlsx'):
@@ -55,7 +178,10 @@ async def handle_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'excel_name': doc.file_name,
         'photo_file_id': None
     }
-    await update.message.reply_text("✅ *Excel mil gayi!*\n\n📸 Photo bhejo ya /skip karo", parse_mode="Markdown")
+    await update.message.reply_text(
+        f"✅ *Excel mil gayi!*\n💰 Coins: *{coins}*\n\n📸 Photo bhejo ya /skip karo",
+        parse_mode="Markdown"
+    )
     return WAITING_PHOTO
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -83,47 +209,6 @@ async def skip_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("⚡ *PDF ban rahi hai (bina photo)...*", parse_mode="Markdown")
     await generate_and_send_pdf(update, context, user_id)
     return WAITING_EXCEL
-
-async def add_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
-        return
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /adduser 123456789")
-        return
-    try:
-        new_user = int(context.args[0])
-        ALLOWED_USERS.add(new_user)
-        await update.message.reply_text(f"✅ User `{new_user}` add ho gaya!", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("❌ Galat ID! Sirf number dalo.")
-
-async def remove_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
-        return
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /removeuser 123456789")
-        return
-    try:
-        rem_user = int(context.args[0])
-        if rem_user == ADMIN_ID:
-            await update.message.reply_text("❌ Admin ko remove nahi kar sakte!")
-            return
-        ALLOWED_USERS.discard(rem_user)
-        await update.message.reply_text(f"✅ User `{rem_user}` remove ho gaya!", parse_mode="Markdown")
-    except ValueError:
-        await update.message.reply_text("❌ Galat ID! Sirf number dalo.")
-
-async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not is_admin(user_id):
-        await update.message.reply_text("❌ Sirf admin ye command use kar sakta hai!")
-        return
-    users = "\n".join([f"`{u}` {'👑 Admin' if u == ADMIN_ID else ''}" for u in ALLOWED_USERS])
-    await update.message.reply_text(f"👥 *Allowed Users:*\n\n{users}", parse_mode="Markdown")
 
 async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id: int):
     data = user_data_store.get(user_id)
@@ -168,12 +253,16 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
             timeout=300
         )
         if pdf_response.status_code == 200 and 'application/pdf' in pdf_response.headers.get('Content-Type', ''):
+            # Coin kata jaye (admin ka nahi)
+            if not is_admin(user_id):
+                user_coins[user_id] -= 1
+            remaining = user_coins.get(user_id, 0)
             now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             filename = f"FIA_Travel_History_{excel_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
             await context.bot.edit_message_text(
                 chat_id=update.effective_chat.id,
                 message_id=status_msg.message_id,
-                text=f"✅ *FIA Travel History*\n\n📁 File: `{excel_name}`\n{'📸 With Photo' if data['photo_file_id'] else '🚫 Without Photo'}\n📅 Generated: {now}",
+                text=f"✅ *FIA Travel History*\n\n📁 File: `{excel_name}`\n{'📸 With Photo' if data['photo_file_id'] else '🚫 Without Photo'}\n📅 Generated: {now}\n💰 Remaining Coins: *{remaining}*",
                 parse_mode="Markdown"
             )
             await context.bot.send_document(
@@ -223,7 +312,11 @@ def main():
     app.add_handler(conv_handler)
     app.add_handler(CommandHandler("adduser", add_user))
     app.add_handler(CommandHandler("removeuser", remove_user))
+    app.add_handler(CommandHandler("addcoins", add_coins))
+    app.add_handler(CommandHandler("removecoins", remove_coins))
+    app.add_handler(CommandHandler("checkcoins", check_coins))
     app.add_handler(CommandHandler("users", list_users))
+    app.add_handler(CommandHandler("mycoins", my_coins))
     print("Bot chal raha hai...")
     app.run_polling()
 
