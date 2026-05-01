@@ -20,8 +20,7 @@ logger = logging.getLogger(__name__)
 WAITING_EXCEL = 1
 WAITING_PHOTO = 2
 
-# {user_id: coins}
-user_coins = {1653583277: 9999}  # Admin ke paas unlimited coins
+user_coins = {1653583277: 9999}
 user_data_store = {}
 
 def is_admin(user_id):
@@ -167,7 +166,7 @@ async def handle_excel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
     coins = user_coins.get(user_id, 0)
     if coins <= 0 and not is_admin(user_id):
-        await update.message.reply_text("❌ *Coins khatam ho gaye!*\n\nAdmin se coins lो.", parse_mode="Markdown")
+        await update.message.reply_text("❌ *Coins khatam ho gaye!*\n\nAdmin se coins lо.", parse_mode="Markdown")
         return ConversationHandler.END
     doc = update.message.document
     if not doc.file_name.endswith('.xlsx'):
@@ -215,66 +214,103 @@ async def generate_and_send_pdf(update: Update, context: ContextTypes.DEFAULT_TY
     if not data:
         await update.message.reply_text("❌ Kuch galat hua, dobara try karo!")
         return
+
     photo_status = "✅ Included" if data['photo_file_id'] else "❌ Not included"
     status_msg = await update.message.reply_text(
         f"🖼️ *Photo Status:* {photo_status}\n📥 Downloading your file...",
         parse_mode="Markdown"
     )
+
     try:
+        # Download Excel
         excel_file = await context.bot.get_file(data['excel_file_id'])
         excel_bytes = await excel_file.download_as_bytearray()
+
         files = {
             'excel': (data['excel_name'], bytes(excel_bytes), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         }
+
+        # Download photo if provided
         if data['photo_file_id']:
             photo_file = await context.bot.get_file(data['photo_file_id'])
             photo_bytes = await photo_file.download_as_bytearray()
             files['photo'] = ('photo.jpg', bytes(photo_bytes), 'image/jpeg')
+
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=status_msg.message_id,
             text=f"🖼️ *Photo Status:* {photo_status}\n⚡ Processing... please wait.",
             parse_mode="Markdown"
         )
+
+        # Step 1: Generate images on website
         response = requests.post(WEBSITE_URL, files=files, timeout=300)
+        if response.status_code != 200:
+            await update.message.reply_text("❌ Website se images generate nahi hui. Dobara try karo.")
+            return
+
         excel_name = os.path.splitext(data['excel_name'])[0]
+
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=status_msg.message_id,
             text=f"🖼️ *Photo Status:* {photo_status}\n📄 Generating PDF...",
             parse_mode="Markdown"
         )
-        images = []
-        for i in range(1, 20):
-            images.append(f"{excel_name}_page{i}.png")
+
+        # Step 2: Generate PDF from images
+        images = [f"{excel_name}_page{i}.png" for i in range(1, 20)]
         pdf_response = requests.post(
             PDF_URL,
             data=[('make_pdf', '1')] + [('images[]', img) for img in images],
             timeout=300
         )
-        if pdf_response.status_code == 200 and 'application/pdf' in pdf_response.headers.get('Content-Type', ''):
-            # Coin kata jaye (admin ka nahi)
+
+        # ✅ FIX: Check by content length and PDF magic bytes, not just Content-Type
+        content = pdf_response.content
+        is_pdf = (
+            pdf_response.status_code == 200 and
+            len(content) > 100 and
+            content[:4] == b'%PDF'
+        )
+
+        if is_pdf:
+            # ✅ FIX: Coin deduct karo - admin ka nahi, baaki sab ka
             if not is_admin(user_id):
-                user_coins[user_id] -= 1
+                user_coins[user_id] = max(0, user_coins[user_id] - 1)
+
             remaining = user_coins.get(user_id, 0)
             now = datetime.datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             filename = f"FIA_Travel_History_{excel_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+
             await context.bot.edit_message_text(
                 chat_id=update.effective_chat.id,
                 message_id=status_msg.message_id,
-                text=f"✅ *FIA Travel History*\n\n📁 File: `{excel_name}`\n{'📸 With Photo' if data['photo_file_id'] else '🚫 Without Photo'}\n📅 Generated: {now}\n💰 Remaining Coins: *{remaining}*",
+                text=(
+                    f"✅ *FIA Travel History*\n\n"
+                    f"📁 File: `{excel_name}`\n"
+                    f"{'📸 With Photo' if data['photo_file_id'] else '🚫 Without Photo'}\n"
+                    f"📅 Generated: {now}\n"
+                    f"💰 Remaining Coins: *{remaining}*"
+                ),
                 parse_mode="Markdown"
             )
+
             await context.bot.send_document(
                 chat_id=update.effective_chat.id,
-                document=pdf_response.content,
+                document=content,
                 filename=filename,
                 caption="✅ *Document ready for printing!*",
                 parse_mode="Markdown"
             )
-            await update.message.reply_text("✅ *Process completed! Aap doosri Excel file bhej sakte hain.*", parse_mode="Markdown")
+            await update.message.reply_text(
+                "✅ *Process completed! Aap doosri Excel file bhej sakte hain.*",
+                parse_mode="Markdown"
+            )
         else:
+            logger.error(f"PDF response status: {pdf_response.status_code}, content start: {content[:50]}")
             await update.message.reply_text("⚠️ PDF generate nahi hui. Dobara try karo.")
+
     except requests.exceptions.Timeout:
         await update.message.reply_text("⏱️ Timeout! Dobara try karo.")
     except Exception as e:
