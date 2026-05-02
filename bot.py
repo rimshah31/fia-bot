@@ -9,7 +9,7 @@ from telegram.ext import (
 )
 
 BOT_TOKEN = "8629503335:AAHoTTStZLE29A7cdsXmwJB02wn4MVImDFc"
-WEBSITE_URL = "https://darkred-peafowl-944680.hostingersite.com/ababiil.php"
+WEBSITE_URL = "https://darkred-peafowl-944680.hostingersite.com/index.php"
 PDF_URL = "https://darkred-peafowl-944680.hostingersite.com/pdf.php"
 
 ADMIN_ID = 1653583277
